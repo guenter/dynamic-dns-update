@@ -1,3 +1,3 @@
-module github.com/guenter/gandi-dns-updater
+module github.com/guenter/dynamic-dns-update
 
 go 1.19
