@@ -48,6 +48,39 @@ func TestCloudflareRecordName(t *testing.T) {
 	}
 }
 
+func TestCloudflareZoneName(t *testing.T) {
+	tests := []struct {
+		name       string
+		domainName string
+		want       string
+	}{
+		{
+			name:       "plain",
+			domainName: "example.com",
+			want:       "example.com",
+		},
+		{
+			name:       "trailing dot",
+			domainName: "example.com.",
+			want:       "example.com",
+		},
+		{
+			name:       "mixed case",
+			domainName: "Example.COM",
+			want:       "example.com",
+		},
+	}
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			got := cloudflareZoneName(test.domainName)
+			if got != test.want {
+				t.Fatalf("cloudflareZoneName(%q) = %q, want %q", test.domainName, got, test.want)
+			}
+		})
+	}
+}
+
 func TestCloudflareRecordPayloadOmitsUnsetProxied(t *testing.T) {
 	payload := cloudflareRecordPayload{
 		Type:    "A",

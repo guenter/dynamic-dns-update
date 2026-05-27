@@ -83,9 +83,21 @@ type cloudflareDNSRecord struct {
 	Proxied bool   `json:"proxied"`
 }
 
+type cloudflareZone struct {
+	ID   string `json:"id"`
+	Name string `json:"name"`
+}
+
 type cloudflareAPIMessage struct {
 	Code    int    `json:"code"`
 	Message string `json:"message"`
+}
+
+type cloudflareListZonesResponse struct {
+	Success  bool                   `json:"success"`
+	Errors   []cloudflareAPIMessage `json:"errors"`
+	Messages []cloudflareAPIMessage `json:"messages"`
+	Result   []cloudflareZone       `json:"result"`
 }
 
 type cloudflareListRecordsResponse struct {
@@ -115,7 +127,6 @@ func main() {
 	flag.StringVar(&domainName, "domain_name", "", "Domain name")
 	flag.StringVar(&recordName, "record_name", "", "Record name")
 	flag.IntVar(&ttl, "ttl", defaultTTL, "TTL for the DNS record in seconds")
-	flag.StringVar(&cloudflareZoneID, "cloudflare_zone_id", "", "Cloudflare zone ID. Required when provider is cloudflare")
 	flag.Var(&cloudflareProxied, "cloudflare_proxied", "Cloudflare proxy setting. Omit to preserve existing records; pass true or false to set it")
 	flag.Parse()
 
@@ -128,8 +139,8 @@ func main() {
 	if recordName == "" {
 		log.Fatal("record_name can't be empty")
 	}
-	if provider == providerCloudflare && cloudflareZoneID == "" {
-		log.Fatal("cloudflare_zone_id can't be empty when provider is cloudflare")
+	if provider == providerCloudflare && (myIPv4 != "" || myIPv6 != "") {
+		cloudflareZoneID = findCloudflareZoneID(&http.Client{}, apiKey, domainName)
 	}
 
 	if myIPv4 != "" {
@@ -245,6 +256,42 @@ func updateCloudflareRecord(apiToken string, zoneID string, domainName string, r
 	}
 }
 
+func findCloudflareZoneID(client *http.Client, apiToken string, domainName string) string {
+	zoneName := cloudflareZoneName(domainName)
+	endpoint, err := url.Parse(fmt.Sprintf("%s/zones", cloudflareAPIBaseURL))
+	if err != nil {
+		log.Fatal(err)
+	}
+	query := endpoint.Query()
+	query.Set("name", zoneName)
+	endpoint.RawQuery = query.Encode()
+
+	req, err := http.NewRequest("GET", endpoint.String(), nil)
+	if err != nil {
+		log.Fatal(err)
+	}
+	addCloudflareHeaders(req, apiToken)
+
+	responseBody := doRequest(client, req)
+	var response cloudflareListZonesResponse
+	if err := json.Unmarshal(responseBody, &response); err != nil {
+		log.Fatal(err)
+	}
+	if !response.Success {
+		log.Fatalf("Cloudflare failed to list zones: %s", cloudflareMessages(response.Errors))
+	}
+
+	switch len(response.Result) {
+	case 0:
+		log.Fatalf("Cloudflare zone %q was not found", zoneName)
+	case 1:
+		return response.Result[0].ID
+	default:
+		log.Fatalf("found %d Cloudflare zones named %s; refusing to choose one", len(response.Result), zoneName)
+	}
+	return ""
+}
+
 func findCloudflareRecords(client *http.Client, apiToken string, zoneID string, recordType string, recordName string) []cloudflareDNSRecord {
 	endpoint, err := url.Parse(fmt.Sprintf("%s/zones/%s/dns_records", cloudflareAPIBaseURL, url.PathEscape(zoneID)))
 	if err != nil {
@@ -326,6 +373,10 @@ func cloudflareRequestBody(payload cloudflareRecordPayload) *bytes.Reader {
 func addCloudflareHeaders(req *http.Request, apiToken string) {
 	req.Header.Add("Authorization", fmt.Sprintf("Bearer %s", apiToken))
 	req.Header.Add("Content-Type", "application/json")
+}
+
+func cloudflareZoneName(domainName string) string {
+	return strings.ToLower(strings.TrimSuffix(domainName, "."))
 }
 
 func cloudflareRecordName(domainName string, recordName string) string {

@@ -26,8 +26,6 @@ Usage of Dynamic DNS Update:
     	API key or token for the selected DNS provider
   -cloudflare_proxied
     	Cloudflare proxy setting. Omit to preserve existing records; pass true or false to set it
-  -cloudflare_zone_id string
-    	Cloudflare zone ID. Required when provider is cloudflare
   -domain_name string
     	Domain name
   -ip4 string
@@ -54,13 +52,12 @@ dynamic-dns-update \
 
 ## Cloudflare Usage
 
-Cloudflare requires an API token with DNS write access and a zone ID.
+Cloudflare requires an API token with zone read access and DNS write access. The provider looks up the zone ID from `-domain_name`.
 
 ```
 dynamic-dns-update \
   -provider cloudflare \
   -api_key "$CLOUDFLARE_API_TOKEN" \
-  -cloudflare_zone_id "$CLOUDFLARE_ZONE_ID" \
   -domain_name example.com \
   -record_name home
 ```
